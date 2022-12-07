@@ -9,6 +9,10 @@ admin.initializeApp({
 });
 const category_collection = admin.firestore().collection("categoy");
 const product_collection = admin.firestore().collection("product");
+const brand_collection = admin
+  .firestore()
+  .collection("masterData")
+  .doc("brand");
 const category_list = admin
   .firestore()
   .collection("masterData")
@@ -166,6 +170,69 @@ exports.get_product_by_id = functions
             .then((snapshot) => {
               res.status(200).send(snapshot.data());
             });
+        } else {
+          res.status(405).send("Method Not Allowed");
+        }
+      });
+    });
+  });
+
+exports.brand = functions.region(regions).https.onRequest((req, res) => {
+  cors(req, res, () => {
+    cors(req, res, () => {
+      const method = req.method;
+      if (method === "GET") {
+        brand_collection.get().then((snapshot) => {
+          res.status(200).send(snapshot.data());
+        });
+      } else if (method === "POST") {
+        brand_collection.set({
+          brand: req.body.data,
+        });
+        res.status(200).send("success");
+      } else {
+        res.status(405).send("Method Not Allowed");
+      }
+    });
+  });
+});
+
+exports.public_data_category = functions
+  .region(regions)
+  .https.onRequest((req, res) => {
+    cors(req, res, () => {
+      cors(req, res, async () => {
+        const method = req.method;
+        if (method === "GET") {
+          let responseData = {
+            brand: [],
+            category: [],
+          };
+          const category = [];
+          const snapshot = await category_collection.get();
+          snapshot.forEach((doc) => {
+            product_collection
+              .where("category", "array-contains-any", [doc.id])
+              .get()
+              .then((snapshot) => {
+                category.push({
+                  id: doc.id,
+                  name: doc.data().category_name,
+                  total: snapshot.size,
+                });
+              });
+          });
+          const brand = await brand_collection.get();
+          brand.data().brand.forEach((element) => {
+            const findData = category.find((item) => item.name === element);
+            responseData.brand.push(findData);
+          });
+          res.status(200).send({
+            brand: responseData.brand,
+            category: category.filter(
+              (item) => !responseData.brand.includes(item.name)
+            ),
+          });
         } else {
           res.status(405).send("Method Not Allowed");
         }
