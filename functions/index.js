@@ -118,14 +118,74 @@ exports.list_category = functions
 
 exports.product_list = functions.region(regions).https.onRequest((req, res) => {
   cors(req, res, () => {
-    cors(req, res, () => {
+    cors(req, res, async () => {
       const method = req.method;
       console.log(method);
       if (method === "GET") {
-        const { category } = req.query;
+        const { category, pageSize, pageNumber, suggest } = req.query;
+        const size = parseInt(pageSize);
+        const page = parseInt(pageNumber);
+        // console.log(size, page, category.split(","));
         if (category) {
+          const query = product_collection.where(
+            "category",
+            "array-contains-any",
+            category.split(",")
+          );
+          const snapshot = await query.get();
+          const total = snapshot.size;
+          if (suggest) {
+            console.log(parseInt(Math.random() * (total - size)));
+            product_collection
+              .where("category", "array-contains-any", category.split(","))
+              .orderBy("created_at")
+              .startAt(parseInt(Math.random() * (total - size)))
+              .limit(size)
+              .get()
+              .then((snapshot) => {
+                const data = [];
+                snapshot.forEach((doc) => {
+                  data.push({
+                    id: doc.id,
+                    ...doc.data(),
+                  });
+                });
+                res.status(200).send({
+                  data: data,
+                });
+              });
+          } else {
+            product_collection
+              .where("category", "array-contains-any", category.split(","))
+              .orderBy("created_at")
+              .startAt((page - 1) * size)
+              .limit(size)
+              .get()
+              .then((snapshot) => {
+                const data = [];
+                snapshot.forEach((doc) => {
+                  data.push({
+                    id: doc.id,
+                    ...doc.data(),
+                  });
+                });
+                res.status(200).send({
+                  data: data,
+                  pagination: {
+                    total: total,
+                    pageSize: size,
+                    pageNumber: page,
+                  },
+                });
+              });
+          }
+        } else {
+          const snapshot = await product_collection.get();
+          const total = snapshot.size;
           product_collection
-            .where("category", "in", [category])
+            .orderBy("created_at")
+            .startAt((page - 1) * size)
+            .limit(size)
             .get()
             .then((snapshot) => {
               const data = [];
@@ -135,19 +195,16 @@ exports.product_list = functions.region(regions).https.onRequest((req, res) => {
                   ...doc.data(),
                 });
               });
-              res.status(200).send(data);
-            });
-        } else {
-          product_collection.get().then((snapshot) => {
-            const data = [];
-            snapshot.forEach((doc) => {
-              data.push({
-                id: doc.id,
-                ...doc.data(),
+              console.log(snapshot.size);
+              res.status(200).send({
+                data: data,
+                pagination: {
+                  total: total,
+                  pageSize: size,
+                  pageNumber: page,
+                },
               });
             });
-            res.status(200).send(data);
-          });
         }
       } else {
         res.status(405).send("Method Not Allowed");
